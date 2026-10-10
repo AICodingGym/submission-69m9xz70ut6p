@@ -1727,7 +1727,7 @@ def dot(*arrays, dims=None, **kwargs):
     return result.transpose(*all_dims, missing_dims="ignore")
 
 
-def where(cond, x, y):
+def where(cond, x, y, keep_attrs=None):
     """Return elements from `x` or `y` depending on `cond`.
 
     Performs xarray-like broadcasting across input arguments.
@@ -1743,6 +1743,9 @@ def where(cond, x, y):
         values to choose from where `cond` is True
     y : scalar, array, Variable, DataArray or Dataset
         values to choose from where `cond` is False
+    keep_attrs : bool, optional
+        Whether to keep attributes from `x`. By default, follows the global
+        ``keep_attrs`` option, which defaults to False.
 
     Returns
     -------
@@ -1808,6 +1811,24 @@ def where(cond, x, y):
     Dataset.where, DataArray.where :
         equivalent methods
     """
+    if keep_attrs is None:
+        keep_attrs = _get_keep_attrs(default=False)
+    elif keep_attrs is True:
+        # Put the value arguments first so the first available labeled
+        # object's attributes are from x (or y when x is unlabeled).
+        keep_attrs = lambda attrs, context: attrs[0] if attrs else {}
+
+    # NumPy promotes Python integer scalars to its platform default integer
+    # dtype. Keep small scalar choices narrow and platform-independent.
+    if type(x) is int and type(y) is int:
+        lower, upper = sorted((x, y))
+        for dtype in (np.int8, np.int16, np.int32, np.int64):
+            limits = np.iinfo(dtype)
+            if limits.min <= lower and upper <= limits.max:
+                x = np.asarray(x, dtype=dtype)
+                y = np.asarray(y, dtype=dtype)
+                break
+
     # alignment for three arguments is complicated, so don't support it yet
     return apply_ufunc(
         lambda x, y, cond: duck_array_ops.where(cond, x, y),
@@ -1816,7 +1837,7 @@ def where(cond, x, y):
         cond,
         join="exact",
         dataset_join="exact",
-        keep_attrs=_get_keep_attrs(default=True),
+        keep_attrs=keep_attrs,
         dask="allowed",
     )
 
