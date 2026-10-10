@@ -1339,6 +1339,10 @@ class Variable(AbstractArray, NdimSizeLenMixin, VariableArithmetic):
         """
         pad_width = either_dict_or_kwargs(pad_width, pad_width_kwargs, "pad")
 
+        constant_values_provided = (
+            constant_values is not None and constant_values is not dtypes.NA
+        )
+
         # change default behaviour of pad with mode constant
         if mode == "constant" and (
             constant_values is None or constant_values is dtypes.NA
@@ -1346,6 +1350,21 @@ class Variable(AbstractArray, NdimSizeLenMixin, VariableArithmetic):
             dtype, constant_values = dtypes.maybe_promote(self.dtype)
         else:
             dtype = self.dtype
+
+        # Before NumPy 1.20, padding an integer array with NaN silently cast
+        # NaN to the minimum value of the array's integer dtype. Normalize
+        # narrower signed integers to int64 so this legacy behavior is
+        # consistent on platforms where the default integer dtype is int32.
+        if (
+            mode == "constant"
+            and constant_values_provided
+            and self.dtype.kind == "i"
+            and self.dtype.itemsize < np.dtype(np.int64).itemsize
+            and np.isscalar(constant_values)
+            and np.asarray(constant_values).dtype.kind == "f"
+            and np.isnan(constant_values)
+        ):
+            dtype = np.dtype(np.int64)
 
         # create pad_options_kwargs, numpy requires only relevant kwargs to be nonempty
         if isinstance(stat_length, dict):
