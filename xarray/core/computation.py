@@ -1810,12 +1810,13 @@ def where(cond, x, y):
     """
     # alignment for three arguments is complicated, so don't support it yet
     return apply_ufunc(
-        duck_array_ops.where,
-        cond,
+        lambda x, y, cond: duck_array_ops.where(cond, x, y),
         x,
         y,
+        cond,
         join="exact",
         dataset_join="exact",
+        keep_attrs=_get_keep_attrs(default=True),
         dask="allowed",
     )
 
